@@ -43,8 +43,8 @@ public actor MetricConsumer {
         url: URL,
         accessProvider: RequestAccessProvider,
         session: URLSession = .shared,
-        encoder: BinaryEncoder,
-        decoder: BinaryDecoder) {
+        encoder: BinaryEncoder = JSONEncoder(),
+        decoder: BinaryDecoder = JSONDecoder()) {
 
             self.serverUrl = url
             self.accessProvider = accessProvider
