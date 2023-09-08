@@ -88,7 +88,7 @@ public enum ServerRoute {
          - Returns: The full route as a string
          */
         public func appending(hash: MetricIdHash) -> String {
-            return with(hash: hash).rawValue
+            return rawValue + "/" + hash
         }
     }
 }
