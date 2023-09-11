@@ -153,8 +153,11 @@ public actor MetricConsumer {
      consumer.register(customType: MyType.self, named: "MyType")
      let myMetric = consumer.genericMetric(from: description)
      ```
+
+     - Parameter customType: The custom metric type to register.
      */
-    public func register<T>(customType: T.Type, named typeName: String) where T: MetricValue {
+    public func register<T>(customType: T.Type) where T: MetricValue {
+        let typeName = customType.valueType.rawValue
         customTypeConstructors[typeName] = { info in
             return ConsumableMetric<T>(consumer: self, info: info)
         }
