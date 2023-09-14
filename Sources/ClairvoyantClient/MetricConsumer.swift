@@ -86,8 +86,17 @@ public actor MetricConsumer {
      - Throws: `MetricError` errors, as well as errors from the decoder
      */
     public func list() async throws -> [MetricInfo] {
-        let data = try await post(route: .getMetricList)
-        return try decode(from: data)
+        try await post(route: .getMetricList)
+    }
+
+    /**
+     Get the info for a metric.
+     - Parameter metricId: The id of the metric
+     - Returns: The info of the metric
+     - Throws: `MetricError` errors, as well as errors from the decoder
+     */
+    public func info(for metricId: MetricId) async throws -> MetricInfo {
+        try await post(route: .getMetricInfo(metricId.hashed()))
     }
 
     /**
@@ -215,8 +224,7 @@ public actor MetricConsumer {
     }
 
     public func lastValueDescriptionForAllMetrics() async throws -> [MetricIdHash : Timestamped<String>] {
-        let data = try await post(route: .extendedInfoList)
-        let values = try decode([ExtendedMetricInfo].self, from: data)
+        let values: [ExtendedMetricInfo] = try await post(route: .extendedInfoList)
         return values.reduce(into: [:]) {
             guard let data = $1.lastValueData else { return }
             $0[$1.info.id] = describe(data, ofType: $1.info.dataType)
@@ -261,11 +269,7 @@ public actor MetricConsumer {
         guard let data = try await lastValueData(for: metric) else {
             return nil
         }
-        do {
-            return try decoder.decode(Timestamped<T>.self, from: data)
-        } catch {
-            throw MetricError.failedToDecode
-        }
+        return try decode(Timestamped<T>.self, from: data)
     }
 
     /**
@@ -282,6 +286,11 @@ public actor MetricConsumer {
      */
     public func history<T>(for metric: MetricId, in range: ClosedRange<Date>, type: T.Type = T.self) async throws -> [Timestamped<T>] where T: MetricValue {
         let data = try await historyData(for: metric, in: range)
+        return try decode(from: data)
+    }
+
+    private func post<T>(route: ServerRoute, body: Data? = nil) async throws -> T where T: Decodable {
+        let data = try await post(route: route, body: body)
         return try decode(from: data)
     }
 
