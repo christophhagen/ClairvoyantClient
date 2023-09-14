@@ -6,6 +6,9 @@ import Clairvoyant
  */
 public enum ServerRoute {
 
+    /// Get the info for a metric
+    case getMetricInfo(MetricIdHash)
+
     /// Get a list of all metrics
     case getMetricList
 
@@ -27,6 +30,7 @@ public enum ServerRoute {
     /// The full path of the route
     public var rawValue: String {
         switch self {
+        case .getMetricInfo(let hash): return Prefix.getMetricInfo.appending(hash: hash)
         case .getMetricList: return Prefix.getMetricList.rawValue
         case .lastValue(let hash): return Prefix.lastValue.appending(hash: hash)
         case .allLastValues: return Prefix.allLastValues.rawValue
@@ -42,6 +46,8 @@ public enum ServerRoute {
     /// The start of the route, excluding hashes
     public var prefix: Prefix {
         switch self {
+        case .getMetricInfo:
+            return .getMetricInfo
         case .getMetricList:
             return .getMetricList
         case .lastValue:
@@ -59,6 +65,7 @@ public enum ServerRoute {
 
     /// The prefix of a server route
     public enum Prefix: String {
+        case getMetricInfo = "info"
         case getMetricList = "list"
         case lastValue = "last"
         case allLastValues = "last/all"
@@ -73,6 +80,7 @@ public enum ServerRoute {
          */
         public func with(hash: MetricIdHash) -> ServerRoute {
             switch self {
+            case .getMetricInfo: return .getMetricInfo(hash)
             case .getMetricList: return .getMetricList
             case .lastValue: return .lastValue(hash)
             case .allLastValues: return .allLastValues
