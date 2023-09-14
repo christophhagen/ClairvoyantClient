@@ -181,6 +181,30 @@ public actor MetricConsumer {
     }
 
     /**
+     Get a textual representation of the last value for a metric.
+     - Parameter metric: The info of the metric
+     - Returns: The timestamped text representing the last value
+     - Throws: `MetricError`
+     */
+    public func lastValueDescription(for metric: MetricInfo) async throws -> Timestamped<String>? {
+        try await lastValueDescription(for: metric.id, type: metric.dataType)
+    }
+
+    /**
+     Get a textual representation of the last value for a metric.
+     - Parameter metricId: The id of the metric
+     - Parameter type: The data type of the metric
+     - Returns: The timestamped text representing the last value
+     - Throws: `MetricError`
+     */
+    public func lastValueDescription(for metricId: MetricId, type: MetricType) async throws -> Timestamped<String>? {
+        guard let data = try await lastValueData(for: metricId) else {
+            return nil
+        }
+        return describe(data, ofType: type)
+    }
+
+    /**
      Get the last value data for all metrics of the server.
      - Returns: A dictionary with the metric ID hash and the metric data
      - Note: If no last value exists for a metric, then the dictionary key will be missing.
