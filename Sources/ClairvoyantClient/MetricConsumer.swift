@@ -179,9 +179,12 @@ public actor MetricConsumer {
     }
 
     /**
+     Get the encoded data of the timestamped last value of a metric.
+     - Parameter metric: The id of the metric.
+     - Returns: The timestamped last value data, or `nil`, if no value exists.
      - Throws: `MetricError`
      */
-    func lastValueData(for metric: MetricId) async throws -> Data? {
+    public func lastValueData(for metric: MetricId) async throws -> Data? {
         do {
             return try await post(route: .lastValue(metric.hashed()))
         } catch MetricError.noValueAvailable {
