@@ -307,7 +307,7 @@ public actor MetricConsumer {
         request.httpBody = body
         accessProvider.addAccessDataToMetricRequest(&request, route: route)
         do {
-            let (data, response) = try await urlSessionData(session, for: request)
+            let (data, response) = try await session.data(for: request)
             guard let response = response as? HTTPURLResponse else {
                 throw MetricError.requestFailed
             }
