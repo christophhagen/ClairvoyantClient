@@ -148,6 +148,8 @@ public actor MetricConsumer {
             return metric(from: info, as: ServerStatus.self)
         case .httpStatus:
             return metric(from: info, as: HTTPStatusCode.self)
+        case .semanticVersion:
+            return metric(from: info, as: SemanticVersion.self)
         }
     }
 
@@ -255,6 +257,8 @@ public actor MetricConsumer {
             return describe(data, as: ServerStatus.self)
         case .httpStatus:
             return describe(data, as: HTTPStatusCode.self)
+        case .semanticVersion:
+            return describe(data, as: SemanticVersion.self)
         }
     }
 
