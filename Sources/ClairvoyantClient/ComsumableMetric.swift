@@ -73,7 +73,7 @@ extension ConsumableMetric: GenericConsumableMetric {
         return converted
     }
 
-    public func history<R>(in range: ClosedRange<Date>, limit: Int?, as type: R.Type) async throws -> [Timestamped<R>] where R: MetricValue {
+    public func history<R>(in range: ClosedRange<Date>, limit: Int? = nil, as type: R.Type) async throws -> [Timestamped<R>] where R: MetricValue {
         guard T.valueType == R.valueType else {
             throw MetricError.typeMismatch
         }
