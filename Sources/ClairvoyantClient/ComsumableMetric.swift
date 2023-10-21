@@ -7,10 +7,10 @@ import Clairvoyant
 public actor ConsumableMetric<T> where T: MetricValue {
 
     /// The main consumer of the server
-    public let consumer: MetricConsumer
+    public nonisolated let consumer: MetricConsumer
 
     /// The info of the metric
-    public let info: MetricInfo
+    public nonisolated let info: MetricInfo
 
     /// The unique if of the metric
     public nonisolated var id: MetricId {
