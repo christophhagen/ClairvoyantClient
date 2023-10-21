@@ -53,8 +53,8 @@ public actor ConsumableMetric<T> where T: MetricValue {
      - Returns: The timestamped values within the range.
      - Throws: `MetricError`
      */
-    public func history(in range: ClosedRange<Date>) async throws -> [Timestamped<T>] {
-        try await consumer.history(for: id, in: range)
+    public func history(in range: ClosedRange<Date>, limit: Int? = nil) async throws -> [Timestamped<T>] {
+        try await consumer.history(for: id, in: range, limit: limit)
     }
 }
 
@@ -73,11 +73,11 @@ extension ConsumableMetric: GenericConsumableMetric {
         return converted
     }
 
-    public func history<R>(in range: ClosedRange<Date>, as type: R.Type) async throws -> [Timestamped<R>] where R: MetricValue {
+    public func history<R>(in range: ClosedRange<Date>, limit: Int?, as type: R.Type) async throws -> [Timestamped<R>] where R: MetricValue {
         guard T.valueType == R.valueType else {
             throw MetricError.typeMismatch
         }
-        let values = try await self.history(in: range)
+        let values = try await self.history(in: range, limit: limit)
         return try values.map {
             guard let result = $0 as? Timestamped<R> else {
                 throw MetricError.typeMismatch

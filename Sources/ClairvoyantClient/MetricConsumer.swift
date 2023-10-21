@@ -286,8 +286,8 @@ public actor MetricConsumer {
     /**
      - Throws: `MetricError`
      */
-    func historyData(for metric: MetricId, in range: ClosedRange<Date>) async throws -> Data {
-        let request = MetricHistoryRequest(range)
+    func historyData(for metric: MetricId, in range: ClosedRange<Date>, limit: Int?) async throws -> Data {
+        let request = MetricHistoryRequest(range, limit: limit)
         let body = try encode(request)
         return try await post(route: .metricHistory(metric.hashed()), body: body)
     }
@@ -295,8 +295,8 @@ public actor MetricConsumer {
     /**
      - Throws: `MetricError`
      */
-    public func history<T>(for metric: MetricId, in range: ClosedRange<Date>, type: T.Type = T.self) async throws -> [Timestamped<T>] where T: MetricValue {
-        let data = try await historyData(for: metric, in: range)
+    public func history<T>(for metric: MetricId, in range: ClosedRange<Date>, limit: Int? = nil, type: T.Type = T.self) async throws -> [Timestamped<T>] where T: MetricValue {
+        let data = try await historyData(for: metric, in: range, limit: limit)
         return try decode(from: data)
     }
 
