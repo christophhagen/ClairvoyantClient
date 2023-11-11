@@ -127,7 +127,7 @@ public actor MetricConsumer {
      - Returns: A consumable metric with the specified info
      - Throws: `MetricError.typeMismatch` if the custom type is not registered.
      */
-    public func genericMetric(from info: MetricInfo) throws -> GenericConsumableMetric {
+    public func genericMetric(from info: MetricInfo) -> GenericConsumableMetric {
         switch info.dataType {
         case .integer:
             return metric(from: info, as: Int.self)
@@ -141,7 +141,7 @@ public actor MetricConsumer {
             return metric(from: info, as: Data.self)
         case .customType(named: let name):
             guard let closure = customTypeConstructors[name] else {
-                throw MetricError.typeMismatch
+                return UnknownConsumableMetric(consumer: self, info: info)
             }
             return closure(info)
         case .serverStatus:

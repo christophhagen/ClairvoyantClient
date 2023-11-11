@@ -30,7 +30,7 @@ public protocol GenericConsumableMetric {
 
     func history<R>(in range: ClosedRange<Date>, limit: Int?, as type: R.Type) async throws -> [Timestamped<R>] where R: MetricValue
 
-    func historyDescription(in range: ClosedRange<Date>) async throws -> [Timestamped<String>]
+    func historyDescription(in range: ClosedRange<Date>, limit: Int?) async throws -> [Timestamped<String>]
 }
 
 extension GenericConsumableMetric {
