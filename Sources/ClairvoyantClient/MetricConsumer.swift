@@ -4,6 +4,8 @@ import Clairvoyant
 import FoundationNetworking
 #endif
 
+typealias HistoryDecodingRoutine = (MetricConsumer, MetricId, MetricHistoryRequest) async throws -> [Timestamped<String>]
+
 /**
  The main connection to a metric server.
  */
@@ -29,6 +31,9 @@ public actor MetricConsumer {
 
     /// Custom mappings to create consumable metrics for types
     private var customTypeDescriptors: [String : (Data) -> Timestamped<String>]
+    
+    /// Custom mappings to decode the history of custom types
+    private var customHistoryDescriptors: [String : HistoryDecodingRoutine]
 
     /**
      Create a metric consumer.
@@ -53,6 +58,7 @@ public actor MetricConsumer {
             self.encoder = encoder
             self.customTypeConstructors = [:]
             self.customTypeDescriptors = [:]
+            self.customHistoryDescriptors = [:]
     }
 
     /**
@@ -180,6 +186,68 @@ public actor MetricConsumer {
             }
             return self.describe(data, as: T.self)
         }
+        customHistoryDescriptors[customType.valueType.rawValue] = { consumer, id, request in
+            try await consumer.textHistory(for: id, request: request, as: customType.self)
+        }
+    }
+    
+    private func textHistory<T>(for metric: MetricId, request: MetricHistoryRequest, as type: T.Type = T.self) async throws -> [Timestamped<String>] where T : MetricValue {
+        try await history(for: metric, request: request, as: type)
+            .map { $0.mapValue { "\($0)"} }
+    }
+    
+    private func customHistory(for metric: MetricId, request: MetricHistoryRequest, as type: String) async throws -> [Timestamped<String>] {
+        guard let conversion = customHistoryDescriptors[type] else {
+            throw MetricError.failedToDecode
+        }
+        return try await conversion(self, metric, request)
+    }
+    
+    /**
+     Retrieve the history of a metric, and create a textual description for the values.
+     - Parameter metric: The id of the metric
+     - Parameter type: The data type of the metric
+     - Parameter range: The date interval for which to get the history
+     - Parameter limit: The maximum number of entries to get, starting from `range.lowerBound`
+     - Returns: The timestamped values in the range, converted to a textual description.
+     */
+    public func historyDescription(for metric: MetricId, type: MetricType, in range: ClosedRange<Date>, limit: Int? = nil) async throws -> [Timestamped<String>] {
+        try await historyDescription(for: metric, type: type, from: range.lowerBound, to: range.upperBound, limit: limit)
+    }
+    
+    /**
+     Retrieve the history of a metric, and create a textual description for the values.
+     - Parameter metric: The id of the metric
+     - Parameter type: The data type of the metric
+     - Parameter start: The start date of the history to get
+     - Parameter end: The end date of the history request
+     - Parameter limit: The maximum number of entries to get, starting from `range.lowerBound`
+     - Returns: The timestamped values in the range, converted to a textual description.
+     */
+    public func historyDescription(for metric: MetricId, type: MetricType, from start: Date, to end: Date, limit: Int? = nil) async throws -> [Timestamped<String>] {
+        let request = MetricHistoryRequest(start: start, end: end, limit: limit)
+        switch type {
+        case .integer:
+            return try await textHistory(for: metric, request: request, as: Int.self)
+        case .double:
+            return try await textHistory(for: metric, request: request, as: Double.self)
+        case .boolean:
+            return try await textHistory(for: metric, request: request, as: Bool.self)
+        case .string:
+            return try await textHistory(for: metric, request: request, as: String.self)
+        case .data:
+            return try await textHistory(for: metric, request: request, as: Data.self)
+        case .customType(let named):
+            return try await customHistory(for: metric, request: request, as: named)
+        case .serverStatus:
+            return try await textHistory(for: metric, request: request, as: ServerStatus.self)
+        case .httpStatus:
+            return try await textHistory(for: metric, request: request, as: HTTPStatusCode.self)
+        case .semanticVersion:
+            return try await textHistory(for: metric, request: request, as: SemanticVersion.self)
+        case .date:
+            return try await textHistory(for: metric, request: request, as: Date.self)
+        }
     }
 
     /**
@@ -286,17 +354,52 @@ public actor MetricConsumer {
     /**
      - Throws: `MetricError`
      */
-    func historyData(for metric: MetricId, in range: ClosedRange<Date>, limit: Int?) async throws -> Data {
-        let request = MetricHistoryRequest(range, limit: limit)
+    func historyData(for metric: MetricId, from start: Date, to end: Date, limit: Int?) async throws -> Data {
+        let request = MetricHistoryRequest(start: start, end: end, limit: limit)
+        return try await historyData(for: metric, request: request)
+    }
+    
+    /**
+     - Throws: `MetricError`
+     */
+    func historyData(for metric: MetricId, request: MetricHistoryRequest) async throws -> Data {
         let body = try encode(request)
         return try await post(route: .metricHistory(metric.hashed()), body: body)
     }
 
     /**
+     Get the history of the metric within a specified range.
+     
+     - Parameter metric: The metric id
+     - Parameter range: The start and end date of the history to get
+     - Parameter limit: The maximum number of items to get, starting from `range.lowerbound`
+     - Parameter type: The data type of the metric
+     - Note: If you need to get a limited number of items starting from the end point of the range, then use ``history(for:start:end:limit:type:)``
      - Throws: `MetricError`
      */
-    public func history<T>(for metric: MetricId, in range: ClosedRange<Date>, limit: Int? = nil, type: T.Type = T.self) async throws -> [Timestamped<T>] where T: MetricValue {
-        let data = try await historyData(for: metric, in: range, limit: limit)
+    public func history<T>(for metric: MetricId, in range: ClosedRange<Date>, limit: Int? = nil, as type: T.Type = T.self) async throws -> [Timestamped<T>] where T: MetricValue {
+        let request = MetricHistoryRequest(range, limit: limit)
+        return try await history(for: metric, request: request)
+    }
+    
+    func history<T>(for metric: MetricId, request: MetricHistoryRequest, as type: T.Type = T.self) async throws -> [Timestamped<T>] where T: MetricValue {
+        let data = try await historyData(for: metric, request: request)
+        return try decode(from: data)
+    }
+    
+    /**
+     Get the history of the metric within a specified range.
+     
+     - Parameter metric: The metric id
+     - Parameter start: The start date of the history to get
+     - Parameter end: The end date of the history request
+     - Parameter limit: The maximum number of items to get, starting from `start`
+     - Parameter type: The data type of the metric
+     - Note: The `start` date may be after the `end` date. The returned array is always sorted from `start` to `end`
+     - Throws: `MetricError`
+     */
+    public func history<T>(for metric: MetricId, from start: Date, to end: Date, limit: Int? = nil, type: T.Type = T.self) async throws -> [Timestamped<T>] where T: MetricValue {
+        let data = try await historyData(for: metric, from: start, to: end, limit: limit)
         return try decode(from: data)
     }
 

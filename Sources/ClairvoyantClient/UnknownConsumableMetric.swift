@@ -38,7 +38,6 @@ public actor UnknownConsumableMetric {
         self.consumer = consumer
         self.info = info
     }
-
 }
 
 extension UnknownConsumableMetric: GenericConsumableMetric {
@@ -69,12 +68,12 @@ extension UnknownConsumableMetric: GenericConsumableMetric {
         return try await consumer.lastValue(for: id, type: R.self)
     }
     
-    public func history<R>(in range: ClosedRange<Date>, limit: Int?, as type: R.Type) async throws -> [Timestamped<R>] where R : MetricValue {
-        try await consumer.history(for: id, in: range, limit: limit)
+    public func history<R>(from start: Date, to end: Date, limit: Int?, as type: R.Type) async throws -> [Timestamped<R>] where R : MetricValue {
+        try await consumer.history(for: id, from: start, to: end, limit: limit)
     }
     
-    public func historyDescription(in range: ClosedRange<Date>, limit: Int?) async throws -> [Timestamped<String>] {
-        let data = try await consumer.historyData(for: id, in: range, limit: limit)
+    public func historyDescription(from start: Date, to end: Date, limit: Int?) async throws -> [Timestamped<String>] {
+        let data = try await consumer.historyData(for: id, from: start, to: end, limit: limit)
         return try consumer.decoder.decode([AnyTimestamped].self, from: data)
             .map { Timestamped<String>.init(value: "Some data", timestamp: $0.timestamp) }
     }

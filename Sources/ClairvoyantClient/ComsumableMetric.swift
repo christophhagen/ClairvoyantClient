@@ -50,12 +50,27 @@ public actor ConsumableMetric<T> where T: MetricValue {
 
     /**
      Get the history of the metric value in a specified range
+     - Parameter range: The date interval for which to get the history
+     - Parameter limit: The maximum number of entries to get, starting from `range.lowerBound`
      - Returns: The timestamped values within the range.
      - Throws: `MetricError`
      */
     public func history(in range: ClosedRange<Date>, limit: Int? = nil) async throws -> [Timestamped<T>] {
         try await consumer.history(for: id, in: range, limit: limit)
     }
+    
+    /**
+     Get the history of the metric value in a specified range
+     - Parameter start: The start date of the history to get
+     - Parameter end: The end date of the history request
+     - Parameter limit: The maximum number of entries to get, starting from `range.lowerBound`
+     - Returns: The timestamped values within the range.
+     - Throws: `MetricError`
+     */
+    public func history(from start: Date, to end: Date, limit: Int? = nil) async throws -> [Timestamped<T>] {
+        try await consumer.history(for: id, from: start, to: end, limit: limit)
+    }
+    
 }
 
 extension ConsumableMetric: GenericConsumableMetric {
@@ -67,11 +82,11 @@ extension ConsumableMetric: GenericConsumableMetric {
         return try await consumer.lastValue(for: id, type: R.self)
     }
 
-    public func history<R>(in range: ClosedRange<Date>, limit: Int? = nil, as type: R.Type) async throws -> [Timestamped<R>] where R: MetricValue {
+    public func history<R>(from start: Date, to end: Date, limit: Int? = nil, as type: R.Type) async throws -> [Timestamped<R>] where R: MetricValue {
         guard T.valueType == R.valueType else {
             throw MetricError.typeMismatch
         }
-        let values = try await self.history(in: range, limit: limit)
+        let values = try await self.history(from: start, to: end, limit: limit)
         return try values.map {
             guard let result = $0 as? Timestamped<R> else {
                 throw MetricError.typeMismatch
@@ -94,8 +109,8 @@ extension ConsumableMetric: GenericConsumableMetric {
         return value.mapValue { "\($0)" }
     }
 
-    public func historyDescription(in range: ClosedRange<Date>, limit: Int?) async throws -> [Timestamped<String>] {
-        try await history(in: range, limit: limit)
+    public func historyDescription(from start: Date, to end: Date, limit: Int?) async throws -> [Timestamped<String>] {
+        try await history(from: start, to: end, limit: limit)
             .map { $0.mapValue(String.init(describing:)) }
     }
 }

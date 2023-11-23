@@ -28,9 +28,17 @@ public protocol GenericConsumableMetric {
      */
     func lastValue<R>(as type: R.Type) async throws -> Timestamped<R>? where R: MetricValue
 
-    func history<R>(in range: ClosedRange<Date>, limit: Int?, as type: R.Type) async throws -> [Timestamped<R>] where R: MetricValue
+    /**
+     Get the history of the metric value in a specified range
+     - Parameter start: The start date of the history to get
+     - Parameter end: The end date of the history request
+     - Parameter limit: The maximum number of entries to get, starting from `range.lowerBound`
+     - Returns: The timestamped values within the range.
+     - Throws: `MetricError`
+     */
+    func history<R>(from start: Date, to end: Date, limit: Int?, as type: R.Type) async throws -> [Timestamped<R>] where R: MetricValue
 
-    func historyDescription(in range: ClosedRange<Date>, limit: Int?) async throws -> [Timestamped<String>]
+    func historyDescription(from start: Date, to end: Date, limit: Int?) async throws -> [Timestamped<String>]
 }
 
 extension GenericConsumableMetric {
@@ -58,5 +66,20 @@ extension GenericConsumableMetric {
      */
     public func describe<T>(_ data: Data, as type: T.Type) -> Timestamped<String> where T: MetricValue {
         consumer.describe(data, as: type)
+    }
+    
+    /**
+     Get the history of the metric value in a specified range
+     - Parameter range: The date interval for which to get the history
+     - Parameter limit: The maximum number of entries to get, starting from `range.lowerBound`
+     - Returns: The timestamped values within the range.
+     - Throws: `MetricError`
+     */
+    func history<R>(in range: ClosedRange<Date>, limit: Int?, as type: R.Type) async throws -> [Timestamped<R>] where R: MetricValue {
+        try await history(from: range.lowerBound, to: range.upperBound, limit: limit, as: type)
+    }
+    
+    func historyDescription(in range: ClosedRange<Date>, limit: Int?) async throws -> [Timestamped<String>] {
+        try await historyDescription(from: range.lowerBound, to: range.upperBound, limit: limit)
     }
 }
