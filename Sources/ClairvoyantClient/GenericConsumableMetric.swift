@@ -75,11 +75,11 @@ extension GenericConsumableMetric {
      - Returns: The timestamped values within the range.
      - Throws: `MetricError`
      */
-    func history<R>(in range: ClosedRange<Date>, limit: Int?, as type: R.Type) async throws -> [Timestamped<R>] where R: MetricValue {
+    public func history<R>(in range: ClosedRange<Date>, limit: Int?, as type: R.Type) async throws -> [Timestamped<R>] where R: MetricValue {
         try await history(from: range.lowerBound, to: range.upperBound, limit: limit, as: type)
     }
     
-    func historyDescription(in range: ClosedRange<Date>, limit: Int?) async throws -> [Timestamped<String>] {
+    public func historyDescription(in range: ClosedRange<Date>, limit: Int?) async throws -> [Timestamped<String>] {
         try await historyDescription(from: range.lowerBound, to: range.upperBound, limit: limit)
     }
 }
