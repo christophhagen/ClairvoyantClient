@@ -25,15 +25,8 @@ public actor MetricConsumer {
 
     /// The decoder used for decoding received data
     public let encoder: BinaryEncoder
-
-    /// Custom mappings to create consumable metrics for types
-    private var customTypeConstructors: [String : (MetricInfo) -> GenericConsumableMetric]
-
-    /// Custom mappings to create consumable metrics for types
-    private var customTypeDescriptors: [String : (Data) -> Timestamped<String>]
     
-    /// Custom mappings to decode the history of custom types
-    private var customHistoryDescriptors: [String : HistoryDecodingRoutine]
+    public nonisolated let customTypeHandler: CustomTypeHandler
 
     /**
      Create a metric consumer.
@@ -43,22 +36,47 @@ public actor MetricConsumer {
      - Parameter session: The url session to use for the requests
      - Parameter encoder: The encoder to use for encoding outgoing data
      - Parameter decoder: The decoder to decode received data
+     - Parameter customTypeRegistation: A closure to register all custom types which should be decodable
      */
     public init(
         url: URL,
         accessProvider: RequestAccessProvider,
         session: URLSession = .shared,
         encoder: BinaryEncoder = JSONEncoder(),
-        decoder: BinaryDecoder = JSONDecoder()) {
+        decoder: BinaryDecoder = JSONDecoder(),
+        customTypeRegistation: (inout CustomTypeRegistrar) -> Void = { _ in }) {
 
             self.serverUrl = url
             self.accessProvider = accessProvider
             self.session = session
             self.decoder = decoder
             self.encoder = encoder
-            self.customTypeConstructors = [:]
-            self.customTypeDescriptors = [:]
-            self.customHistoryDescriptors = [:]
+            self.customTypeHandler = .init(customTypeRegistation)
+    }
+    
+    /**
+     Create a metric consumer.
+
+     - Parameter url: The url to the server where the metrics are exposed
+     - Parameter accessProvider: The provider of access tokens to get metrics
+     - Parameter session: The url session to use for the requests
+     - Parameter encoder: The encoder to use for encoding outgoing data
+     - Parameter decoder: The decoder to decode received data
+     - Parameter customTypes: The handler for all custom types
+     */
+    public init(
+        url: URL,
+        accessProvider: RequestAccessProvider,
+        session: URLSession = .shared,
+        encoder: BinaryEncoder = JSONEncoder(),
+        decoder: BinaryDecoder = JSONDecoder(),
+        customTypes: CustomTypeHandler) {
+            self.serverUrl = url
+            self.accessProvider = accessProvider
+            self.session = session
+            self.decoder = decoder
+            self.encoder = encoder
+            self.customTypeHandler = customTypes
     }
 
     /**
@@ -112,7 +130,7 @@ public actor MetricConsumer {
      - Parameter description: A textual description of the metric
      - Returns: A consumable metric of the specified type.
      */
-    public func metric<T>(id: MetricId, name: String? = nil, description: String? = nil) -> ConsumableMetric<T> where T: MetricValue {
+    public nonisolated func metric<T>(id: MetricId, name: String? = nil, description: String? = nil) -> ConsumableMetric<T> where T: MetricValue {
         .init(consumer: self, id: id, name: name, description: description)
     }
 
@@ -121,7 +139,7 @@ public actor MetricConsumer {
      - Parameter info: The info about the metric to create.
      - Returns: A consumable metric with the specified info
      */
-    public func metric<T>(from info: MetricInfo, as type: T.Type = T.self) -> ConsumableMetric<T> where T: MetricValue {
+    public nonisolated func metric<T>(from info: MetricInfo, as type: T.Type = T.self) -> ConsumableMetric<T> where T: MetricValue {
         .init(consumer: self, info: info)
     }
 
@@ -133,7 +151,7 @@ public actor MetricConsumer {
      - Returns: A consumable metric with the specified info
      - Throws: `MetricError.typeMismatch` if the custom type is not registered.
      */
-    public func genericMetric(from info: MetricInfo) -> GenericConsumableMetric {
+    public nonisolated func genericMetric(from info: MetricInfo) -> GenericConsumableMetric {
         switch info.dataType {
         case .integer:
             return metric(from: info, as: Int.self)
@@ -146,10 +164,7 @@ public actor MetricConsumer {
         case .data:
             return metric(from: info, as: Data.self)
         case .customType(named: let name):
-            guard let closure = customTypeConstructors[name] else {
-                return UnknownConsumableMetric(consumer: self, info: info)
-            }
-            return closure(info)
+            return customTypeHandler.metric(ofTypeNamed: name, info: info, consumer: self)
         case .serverStatus:
             return metric(from: info, as: ServerStatus.self)
         case .httpStatus:
@@ -160,47 +175,10 @@ public actor MetricConsumer {
             return metric(from: info, as: Date.self)
         }
     }
-
-    /**
-     Register a custom type.
-
-     Call this function with your custom types so that generic consumable metrics can be created using ``genericMetric(from:)``.
-
-     ```
-     let metricInfo = MetricInfo(id: "my.log", dataType: .custom("MyType"))
-
-     consumer.register(customType: MyType.self, named: "MyType")
-     let myMetric = consumer.genericMetric(from: description)
-     ```
-
-     - Parameter customType: The custom metric type to register.
-     */
-    public func register<T>(customType: T.Type) where T: MetricValue {
-        let typeName = customType.valueType.rawValue
-        customTypeConstructors[typeName] = { info in
-            return ConsumableMetric<T>(consumer: self, info: info)
-        }
-        customTypeDescriptors[typeName] = { [weak self] data in
-            guard let self else {
-                return .init(value: "Internal error")
-            }
-            return self.describe(data, as: T.self)
-        }
-        customHistoryDescriptors[customType.valueType.rawValue] = { consumer, id, request in
-            try await consumer.textHistory(for: id, request: request, as: customType.self)
-        }
-    }
     
-    private func textHistory<T>(for metric: MetricId, request: MetricHistoryRequest, as type: T.Type = T.self) async throws -> [Timestamped<String>] where T : MetricValue {
+    func textHistory<T>(for metric: MetricId, request: MetricHistoryRequest, as type: T.Type = T.self) async throws -> [Timestamped<String>] where T : MetricValue {
         try await history(for: metric, request: request, as: type)
             .map { $0.mapValue { "\($0)"} }
-    }
-    
-    private func customHistory(for metric: MetricId, request: MetricHistoryRequest, as type: String) async throws -> [Timestamped<String>] {
-        guard let conversion = customHistoryDescriptors[type] else {
-            throw MetricError.failedToDecode
-        }
-        return try await conversion(self, metric, request)
     }
     
     /**
@@ -238,7 +216,7 @@ public actor MetricConsumer {
         case .data:
             return try await textHistory(for: metric, request: request, as: Data.self)
         case .customType(let named):
-            return try await customHistory(for: metric, request: request, as: named)
+            return try await customTypeHandler.history(for: metric, request: request, as: named, consumer: self)
         case .serverStatus:
             return try await textHistory(for: metric, request: request, as: ServerStatus.self)
         case .httpStatus:
@@ -306,39 +284,12 @@ public actor MetricConsumer {
         }
     }
 
-    public func describe(_ data: Data, ofType dataType: MetricType) -> Timestamped<String> {
-        switch dataType {
-        case .integer:
-            return describe(data, as: Int.self)
-        case .double:
-            return describe(data, as: Double.self)
-        case .boolean:
-            return describe(data, as: Bool.self)
-        case .string:
-            return describe(data, as: String.self)
-        case .data:
-            return describe(data, as: Data.self)
-        case .customType(named: let name):
-            guard let closure = customTypeDescriptors[name] else {
-                return .init(value: "Unknown type")
-            }
-            return closure(data)
-        case .serverStatus:
-            return describe(data, as: ServerStatus.self)
-        case .httpStatus:
-            return describe(data, as: HTTPStatusCode.self)
-        case .semanticVersion:
-            return describe(data, as: SemanticVersion.self)
-        case .date:
-            return describe(data, as: Date.self)
-        }
+    public nonisolated func describe(_ data: Data, ofType dataType: MetricType) -> Timestamped<String> {
+        customTypeHandler.describe(data, ofType: dataType, decoder: decoder)
     }
 
     nonisolated func describe<T>(_ data: Data, as type: T.Type) -> Timestamped<String> where T: MetricValue {
-        guard let decoded = try? decoder.decode(Timestamped<T>.self, from: data) else {
-            return .init(value: "Decoding error")
-        }
-        return decoded.mapValue { "\($0)" }
+        customTypeHandler.describe(data, as: type, decoder: decoder)
     }
 
     /**
