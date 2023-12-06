@@ -83,7 +83,19 @@ One special addition should be made when using `GenericConsumableMetric`s to use
 It's not possible for a `MetricConsumer` to decode custom types without knowing about the type, so each custom type used in generic metrics should be registered with the consumer:
 
 ```swift
-metricConsumer.register(customType: Player.self, named: "Player")
+let consumer = MetricConsumer(url: myServerURL, accessProvider: ...) {
+    $0.register(Player.self)
+}
+```
+
+It's also possible to create a single instance and reuse it:
+
+```swift
+let handler = CustomTypeHandler() {
+    $0.register(Player.self)
+}
+
+let consumer = MetricConsumer(..., customTypes: handler)
 ```
 
 Now, textual descriptions of the generic metric gives useful output:

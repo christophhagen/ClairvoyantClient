@@ -1,6 +1,17 @@
 import Foundation
 import Clairvoyant
 
+/**
+ A type to register custom metric types with.
+ 
+ This type will not be created by the user. It is used to provide a mutable structure for type registration during initialization of a ``CustomTypeHandler``.
+ 
+ ```
+ let handler = CustomTypeHandler() {
+    $0.register(MyCustomType.self)
+ }
+ ```
+ */
 public struct CustomTypeRegistrar {
     
     /// Custom mappings to create consumable metrics for types
@@ -26,6 +37,9 @@ public struct CustomTypeRegistrar {
     }
 }
 
+/**
+ A type to register custom metric types for decoding with a ``MetricConsumer``.
+ */
 public struct CustomTypeHandler {
     
     /// Custom mappings to create consumable metrics for types
