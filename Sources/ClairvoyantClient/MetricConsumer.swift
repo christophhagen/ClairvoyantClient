@@ -112,6 +112,15 @@ public actor MetricConsumer {
     public func list() async throws -> [MetricInfo] {
         try await post(route: .getMetricList)
     }
+    
+    /**
+     Get a list of all metric infos, including their last value data.
+     - Returns: A list of available metrics
+     - Throws: `MetricError` errors, as well as errors from the decoder
+     */
+    public func extendedList() async throws -> [MetricIdHash: ExtendedMetricInfo] {
+        try await post(route: .extendedInfoList)
+    }
 
     /**
      Get the info for a metric.
