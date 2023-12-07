@@ -11,14 +11,8 @@ typealias HistoryDecodingRoutine = (MetricConsumer, MetricId, MetricHistoryReque
  */
 public actor MetricConsumer {
 
-    /// The url to the server where the metrics are exposed
-    private(set) public var serverUrl: URL
-
-    /// The provider of access tokens to get metrics
-    private(set) public var accessProvider: RequestAccessProvider
-
     /// The url session used for requests
-    private(set) public var session: URLSession
+    public nonisolated let networkInterface: ConsumerNetworkInterface
 
     /// The encoder used for encoding outgoing data
     public let decoder: BinaryDecoder
@@ -46,9 +40,10 @@ public actor MetricConsumer {
         decoder: BinaryDecoder = JSONDecoder(),
         customTypeRegistation: (inout CustomTypeRegistrar) -> Void = { _ in }) {
 
-            self.serverUrl = url
-            self.accessProvider = accessProvider
-            self.session = session
+            self.networkInterface = URLSessionNetworkInterface(
+                serverUrl: url,
+                accessProvider: accessProvider,
+                session: session)
             self.decoder = decoder
             self.encoder = encoder
             self.customTypeHandler = .init(customTypeRegistation)
@@ -71,37 +66,35 @@ public actor MetricConsumer {
         encoder: BinaryEncoder = JSONEncoder(),
         decoder: BinaryDecoder = JSONDecoder(),
         customTypes: CustomTypeHandler) {
-            self.serverUrl = url
-            self.accessProvider = accessProvider
-            self.session = session
+            self.networkInterface = URLSessionNetworkInterface(
+                serverUrl: url,
+                accessProvider: accessProvider,
+                session: session)
             self.decoder = decoder
             self.encoder = encoder
             self.customTypeHandler = customTypes
     }
-
-    /**
-     Set the url to the server.
-     - Parameter url: The url of the server
-     */
-    public func set(serverUrl: URL) {
-        self.serverUrl = serverUrl
+    
+    public init(
+        network: ConsumerNetworkInterface,
+        encoder: BinaryEncoder = JSONEncoder(),
+        decoder: BinaryDecoder = JSONDecoder(),
+        customTypes: CustomTypeHandler) {
+            self.networkInterface = network
+            self.decoder = decoder
+            self.encoder = encoder
+            self.customTypeHandler = customTypes
     }
-
-    /**
-     Set the access provider.
-     - Parameter accessProvider: The provider to handle access control
-     */
-    public func set(accessProvider: RequestAccessProvider) {
-        self.accessProvider = accessProvider
-    }
-
-    /**
-     Set the session to use for requests.
-     - Parameter session: The new session to use for the requests
-     - Note: Requests in progress will finish with the old session.
-     */
-    public func set(session: URLSession) {
-        self.session = session
+    
+    public init(
+        network: ConsumerNetworkInterface,
+        encoder: BinaryEncoder = JSONEncoder(),
+        decoder: BinaryDecoder = JSONDecoder(),
+        customTypeRegistation: (inout CustomTypeRegistrar) -> Void = { _ in }) {
+            self.networkInterface = network
+            self.decoder = decoder
+            self.encoder = encoder
+            self.customTypeHandler = .init(customTypeRegistation)
     }
 
     /**
@@ -245,7 +238,7 @@ public actor MetricConsumer {
      */
     public func lastValueData(for metric: MetricId) async throws -> Data? {
         do {
-            return try await post(route: .lastValue(metric.hashed()))
+            return try await networkInterface.post(route: .lastValue(metric.hashed()), body: nil)
         } catch MetricError.noValueAvailable {
             return nil
         }
@@ -281,7 +274,7 @@ public actor MetricConsumer {
      - Note: If no last value exists for a metric, then the dictionary key will be missing.
      */
     public func lastValueDataForAllMetrics() async throws -> [MetricIdHash : Data] {
-        let data = try await post(route: .allLastValues)
+        let data = try await networkInterface.post(route: .allLastValues, body: nil)
         return try decode(from: data)
     }
 
@@ -324,7 +317,7 @@ public actor MetricConsumer {
      */
     func historyData(for metric: MetricId, request: MetricHistoryRequest) async throws -> Data {
         let body = try encode(request)
-        return try await post(route: .metricHistory(metric.hashed()), body: body)
+        return try await networkInterface.post(route: .metricHistory(metric.hashed()), body: body)
     }
 
     /**
@@ -337,7 +330,7 @@ public actor MetricConsumer {
      - Note: If you need to get a limited number of items starting from the end point of the range, then use ``history(for:start:end:limit:type:)``
      - Throws: `MetricError`
      */
-    public func history<T>(for metric: MetricId, in range: ClosedRange<Date>, limit: Int? = nil, as type: T.Type = T.self) async throws -> [Timestamped<T>] where T: MetricValue {
+    public func history<T>(for metric: MetricId, in range: ClosedRange<Date> = Date.distantPast...Date.distantFuture, limit: Int? = nil, as type: T.Type = T.self) async throws -> [Timestamped<T>] where T: MetricValue {
         let request = MetricHistoryRequest(range, limit: limit)
         return try await history(for: metric, request: request)
     }
@@ -364,36 +357,8 @@ public actor MetricConsumer {
     }
 
     private func post<T>(route: ServerRoute, body: Data? = nil) async throws -> T where T: Decodable {
-        let data = try await post(route: route, body: body)
+        let data = try await networkInterface.post(route: route, body: body)
         return try decode(from: data)
-    }
-
-    /**
-     - Throws: `MetricError`
-     */
-    private func post(route: ServerRoute, body: Data? = nil) async throws -> Data {
-        let url = serverUrl.appendingPathComponent(route.rawValue)
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.httpBody = body
-        accessProvider.addAccessDataToMetricRequest(&request, route: route)
-        do {
-            let (data, response) = try await session.data(for: request)
-            guard let response = response as? HTTPURLResponse else {
-                throw MetricError.requestFailed
-            }
-            if response.statusCode == 200 {
-                return data
-            }
-            if let metricError = MetricError(statusCode: response.statusCode) {
-                throw metricError
-            }
-            throw MetricError.requestFailed
-        } catch let error as MetricError {
-            throw error
-        } catch {
-            throw MetricError.requestFailed
-        }
     }
 
     /**
