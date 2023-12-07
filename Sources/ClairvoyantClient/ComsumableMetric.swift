@@ -55,7 +55,7 @@ public actor ConsumableMetric<T> where T: MetricValue {
      - Returns: The timestamped values within the range.
      - Throws: `MetricError`
      */
-    public func history(in range: ClosedRange<Date>, limit: Int? = nil) async throws -> [Timestamped<T>] {
+    public func history(in range: ClosedRange<Date> = Date.distantPast...Date.distantFuture, limit: Int? = nil) async throws -> [Timestamped<T>] {
         try await consumer.history(for: id, in: range, limit: limit)
     }
     
@@ -63,11 +63,12 @@ public actor ConsumableMetric<T> where T: MetricValue {
      Get the history of the metric value in a specified range
      - Parameter start: The start date of the history to get
      - Parameter end: The end date of the history request
-     - Parameter limit: The maximum number of entries to get, starting from `range.lowerBound`
-     - Returns: The timestamped values within the range.
+     - Parameter limit: The maximum number of entries to get, starting from `start`
+     - Returns: The timestamped values within the range, sorted from `start` to `end`
+     - Note: It's possible for `end` to be before `start`. In this case, `limit` is still applied from the `start`, and the result is sorted in reverse (from `start` to `end`)
      - Throws: `MetricError`
      */
-    public func history(from start: Date, to end: Date, limit: Int? = nil) async throws -> [Timestamped<T>] {
+    public func history(from start: Date = .distantPast, to end: Date = .distantFuture, limit: Int? = nil) async throws -> [Timestamped<T>] {
         try await consumer.history(for: id, from: start, to: end, limit: limit)
     }
     
