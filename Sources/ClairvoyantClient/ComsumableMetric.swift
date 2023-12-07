@@ -72,6 +72,10 @@ public actor ConsumableMetric<T> where T: MetricValue {
         try await consumer.history(for: id, from: start, to: end, limit: limit)
     }
     
+    public func decode(lastValueData: Data) throws -> Timestamped<T> {
+        try consumer.decoder.decode(from: lastValueData)
+    }
+    
 }
 
 extension ConsumableMetric: GenericConsumableMetric {
