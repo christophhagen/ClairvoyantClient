@@ -139,13 +139,17 @@ final class ClairvoyantClientTests: XCTestCase {
         let normalPart = try await clientMetric.history(in: start...end)
         XCTAssertEqual(normalPart, part)
         let limitedNormalPart = try await clientMetric.history(in: start...end, limit: 100)
-        XCTAssertEqual(limitedNormalPart, Array(part.prefix(100)))
+        XCTAssertEqual(limitedNormalPart, part)
+        let moreLimitedNormalPart = try await clientMetric.history(in: start...end, limit: 50)
+        XCTAssertEqual(moreLimitedNormalPart, Array(part.prefix(50)))
         
         // Get some results in 'reverse' order
         let reversePart = try await clientMetric.history(from: end, to: start)
         XCTAssertEqual(reversePart, part.reversed())
         let limitedReversePart = try await clientMetric.history(from: end, to: start, limit: 100)
-        XCTAssertEqual(limitedReversePart, part.suffix(100).reversed())
+        XCTAssertEqual(limitedReversePart, part.reversed())
+        let moreLimitedReversePart = try await clientMetric.history(from: end, to: start, limit: 50)
+        XCTAssertEqual(moreLimitedReversePart, Array(reversePart.prefix(50)))
     }
     
     func testPush() async throws {
