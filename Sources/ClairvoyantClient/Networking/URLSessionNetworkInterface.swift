@@ -4,13 +4,13 @@ import Clairvoyant
 import FoundationNetworking
 #endif
 
-struct URLSessionNetworkInterface {
-    
-    let serverUrl: URL
-    
-    let accessProvider: RequestAccessProvider
-    
-    let session: URLSession
+public struct URLSessionNetworkInterface {
+
+    public let serverUrl: URL
+
+    public let accessProvider: RequestAccessProvider
+
+    public let session: URLSession
 }
 
 extension URLSessionNetworkInterface: ConsumerNetworkInterface {
@@ -18,7 +18,7 @@ extension URLSessionNetworkInterface: ConsumerNetworkInterface {
     /**
      - Throws: `MetricError`
      */
-    func post(route: ServerRoute, body: Data? = nil) async throws -> Data {
+    public func post(route: ServerRoute, body: Data? = nil) async throws -> Data {
         let url = serverUrl.appendingPathComponent(route.rawValue)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"

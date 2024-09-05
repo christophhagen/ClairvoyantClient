@@ -11,7 +11,7 @@ let package = Package(
             targets: ["ClairvoyantClient"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/christophhagen/Clairvoyant", from: "0.14.2"),
+        .package(url: "https://github.com/christophhagen/Clairvoyant", branch: "develop"),
         .package(url: "https://github.com/apple/swift-docc-plugin", from: "1.0.0"),
     ],
     targets: [

@@ -6,14 +6,17 @@ import Clairvoyant
  */
 public enum ServerRoute {
 
+    /// Send a client state and get updates from the server
+    case updates
+
     /// Get the info for a metric
-    case getMetricInfo(MetricIdHash)
+    case getMetricInfo(MetricId)
 
     /// Get a list of all metrics
     case getMetricList
 
     /// Get the last value of a specific metric
-    case lastValue(MetricIdHash)
+    case lastValue(MetricId)
 
     /// Get last values of all metrics
     case allLastValues
@@ -22,21 +25,22 @@ public enum ServerRoute {
     case extendedInfoList
 
     /// Get past values of a specific metric
-    case metricHistory(MetricIdHash)
+    case metricHistory(MetricId)
 
     /// Update the value of a metric
-    case pushValueToMetric(MetricIdHash)
+    case pushValueToMetric(MetricId)
 
     /// The full path of the route
     public var rawValue: String {
         switch self {
-        case .getMetricInfo(let hash): return Prefix.getMetricInfo.appending(hash: hash)
+        case .updates: return Prefix.updates.rawValue
+        case .getMetricInfo(let id): return Prefix.getMetricInfo.appending(id: id)
         case .getMetricList: return Prefix.getMetricList.rawValue
-        case .lastValue(let hash): return Prefix.lastValue.appending(hash: hash)
+        case .lastValue(let id): return Prefix.lastValue.appending(id: id)
         case .allLastValues: return Prefix.allLastValues.rawValue
         case .extendedInfoList: return Prefix.extendedInfoList.rawValue
-        case .metricHistory(let hash): return Prefix.metricHistory.appending(hash: hash)
-        case .pushValueToMetric(let hash): return Prefix.pushValueToMetric.appending(hash: hash)
+        case .metricHistory(let id): return Prefix.metricHistory.appending(id: id)
+        case .pushValueToMetric(let id): return Prefix.pushValueToMetric.appending(id: id)
         }
     }
 
@@ -46,6 +50,8 @@ public enum ServerRoute {
     /// The start of the route, excluding hashes
     public var prefix: Prefix {
         switch self {
+        case .updates:
+            return .updates
         case .getMetricInfo:
             return .getMetricInfo
         case .getMetricList:
@@ -65,6 +71,7 @@ public enum ServerRoute {
 
     /// The prefix of a server route
     public enum Prefix: String {
+        case updates = "sync"
         case getMetricInfo = "info"
         case getMetricList = "list"
         case lastValue = "last"
@@ -78,15 +85,16 @@ public enum ServerRoute {
          - Parameter hash: The metric id hash to add.
          - Returns: The full route
          */
-        public func with(hash: MetricIdHash) -> ServerRoute {
+        public func with(id: MetricId) -> ServerRoute {
             switch self {
-            case .getMetricInfo: return .getMetricInfo(hash)
+            case .updates: return .updates
+            case .getMetricInfo: return .getMetricInfo(id)
             case .getMetricList: return .getMetricList
-            case .lastValue: return .lastValue(hash)
+            case .lastValue: return .lastValue(id)
             case .allLastValues: return .allLastValues
             case .extendedInfoList: return .extendedInfoList
-            case .metricHistory: return .metricHistory(hash)
-            case .pushValueToMetric: return .pushValueToMetric(hash)
+            case .metricHistory: return .metricHistory(id)
+            case .pushValueToMetric: return .pushValueToMetric(id)
             }
         }
 
@@ -95,8 +103,8 @@ public enum ServerRoute {
          - Parameter hash: The metric id hash to add.
          - Returns: The full route as a string
          */
-        public func appending(hash: MetricIdHash) -> String {
-            return rawValue + "/" + hash
+        public func appending(id: MetricId) -> String {
+            return rawValue + "/" + id.group + "/" + id.id
         }
     }
 }
