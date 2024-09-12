@@ -20,6 +20,9 @@ let package = Package(
             dependencies: ["Clairvoyant"]),
         .testTarget(
             name: "ClairvoyantClientTests",
-            dependencies: ["ClairvoyantClient"]),
+            dependencies: [
+                "ClairvoyantClient",
+                .product(name: "MetricFileStorage", package: "Clairvoyant")
+            ]),
     ]
 )

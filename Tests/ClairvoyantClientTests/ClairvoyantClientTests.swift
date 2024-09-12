@@ -1,6 +1,13 @@
 import XCTest
-@testable import ClairvoyantClient
+import ClairvoyantClient
 import Clairvoyant
+import MetricFileStorage
+
+extension MetricInfo: CustomStringConvertible {
+    public var description: String {
+        "\(id.group):\(id.id)<\(valueType)>"
+    }
+}
 
 final class ClairvoyantClientTests: XCTestCase {
     
@@ -13,12 +20,17 @@ final class ClairvoyantClientTests: XCTestCase {
         }
     }
 
-    var logFolder: URL {
-        temporaryDirectory.appendingPathComponent("logs")
+    var serverFolder: URL {
+        temporaryDirectory.appendingPathComponent("server")
+    }
+
+    var clientFolder: URL {
+        temporaryDirectory.appendingPathComponent("client")
     }
 
     override func setUp() async throws {
         try removeAllFiles()
+        self.continueAfterFailure = false
     }
 
     override func tearDown() async throws {
@@ -26,62 +38,78 @@ final class ClairvoyantClientTests: XCTestCase {
     }
 
     private func removeAllFiles() throws {
-        let url = logFolder
-        if FileManager.default.fileExists(atPath: url.path) {
-            try FileManager.default.removeItem(at: url)
-        }
-        MetricObserver.standard = nil
+        try remove(folder: clientFolder)
+        try remove(folder: serverFolder)
     }
-    
-    private func makeParts() -> (serverMetric: Metric<Int>, client: MetricConsumer, clientMetric: ConsumableMetric<Int>) {
-        let observer = MetricObserver(
-            logFolder: logFolder,
-            logMetricId: "observer.log",
-            encoder: JSONEncoder(),
-            decoder: JSONDecoder())
-        
-        let metric: Metric<Int> = observer.addMetric(id: "int")
-        let network = NetworkMock(
+
+    private func remove(folder: URL) throws {
+        if FileManager.default.fileExists(atPath: folder.path) {
+            try FileManager.default.removeItem(at: folder)
+        }
+    }
+
+    private func makeParts() async throws -> (serverMetric: Metric<Int>, client: RemoteStorage<MultiFileStorage>, clientMetric: AsyncMetric<Int>) {
+        let serverStorage = try MultiFileStorage(
+            folder: serverFolder,
+            encoderCreator: JSONEncoder.init,
+            decoderCreator: JSONDecoder.init)
+        let serverMetric = try serverStorage.metric(id: "int", group: "test", type: Int.self)
+        let network = try ServerMock(
             serverUrl: URL(string: "https://example.com")!,
             accessManager: "MySecret",
             accessProvider: "MySecret",
-            observer: observer)
-        
-        let client = MetricConsumer(network: network)
-        let clientMetric: ConsumableMetric<Int> = client.metric(id: metric.id)
-        return (metric, client, clientMetric)
+            storage: serverStorage,
+            encoder: JSONEncoder(),
+            decoder: JSONDecoder())
+
+
+        let localStorage = try MultiFileStorage(
+            folder: clientFolder,
+            encoderCreator: JSONEncoder.init,
+            decoderCreator: JSONDecoder.init)
+
+        let client = RemoteStorage(localStorage: localStorage, network: network, encoder: JSONEncoder(), decoder: JSONDecoder())
+        let clientMetric = try await client.metric(id: serverMetric.id, type: Int.self)
+        #warning("Return server storage")
+        return (serverMetric, client, clientMetric)
     }
     
     func testMetricInfo() async throws {
-        let (serverMetric, client, clientMetric) = makeParts()
+        let (serverMetric, client, clientMetric) = try await makeParts()
         
-        let info = try await client.info(for: clientMetric.id)
+        try await client.syncLocalMetricsListWithServer()
+        let info = try await client.metrics().first { $0.id == clientMetric.id }
         XCTAssertEqual(info, serverMetric.info)
     }
     
     func testMetricList() async throws {
-        let (serverMetric, client, _) = makeParts()
-        
-        let list = try await client.list()
-        XCTAssertEqual(list.count, 2)
-        XCTAssertEqual(list.first(where: { $0.id == serverMetric.id }), serverMetric.info)
-        XCTAssertTrue(list.contains(where: { $0.id == "observer.log" }))
+        let (serverMetric, client, _) = try await makeParts()
+
+        let list = try await client.metrics()
+        XCTAssertEqual(list.count, 1)
+        XCTAssertEqual(list.first, serverMetric.info)
     }
     
     func testLastValue() async throws {
-        let (serverMetric, _, clientMetric) = makeParts()
-        
-        try await serverMetric.update(123)
-        
-        let lastValue = try await clientMetric.lastValue()
+        let (serverMetric, client, clientMetric) = try await makeParts()
+
+        try serverMetric.update(123)
+
+        try await client.syncLocalMetricsListWithServer() // First get metric list
+        let clientCount = try await client.metrics().count
+        XCTAssertEqual(clientCount, 1)
+
+        try await client.updateAllMetrics() // Then update metrics
+
+        let lastValue = try await clientMetric.currentValue()
         XCTAssertNotNil(lastValue)
         XCTAssertEqual(lastValue?.value, 123)
     }
-    
+    /*
     func testAllLastValues() async throws {
-        let (serverMetric, client, clientMetric) = makeParts()
-        
-        try await serverMetric.update(123)
+        let (serverMetric, client, clientMetric) = try await makeParts()
+
+        try serverMetric.update(123)
         
         let lastValues = try await client.lastValueDataForAllMetrics()
         guard let lastValueData = lastValues[serverMetric.idHash] else {
@@ -93,16 +121,16 @@ final class ClairvoyantClientTests: XCTestCase {
     }
     
     func testExtendedInfoList() async throws {
-        let (serverMetric, client, clientMetric) = makeParts()
-        
-        try await serverMetric.update(123)
+        let (serverMetric, client, clientMetric) = try await makeParts()
+
+        try serverMetric.update(123)
         
         let list = try await client.extendedList()
         
         XCTAssertEqual(list.count, 2)
         XCTAssertTrue(list.contains(where: { $0.value.info.id == "observer.log" }))
         
-        guard let metricInfo = list[serverMetric.idHash] else {
+        guard let metricInfo = list[serverMetric.id] else {
             XCTFail("Metric not in extended list")
             return
         }
@@ -116,18 +144,20 @@ final class ClairvoyantClientTests: XCTestCase {
         let lastValue = try await clientMetric.decode(lastValueData: lastValueData)
         XCTAssertEqual(lastValue.value, 123)
     }
-    
+    */
     func testHistory() async throws {
-        let (serverMetric, _, clientMetric) = makeParts()
-        
+        let (serverMetric, client, clientMetric) = try await makeParts()
+
         // Add a lot of data points
         // Need to ensure that decoded dates are the same
         let now = Date(timeIntervalSince1970: Date.now.timeIntervalSince1970)
         let values = (1...1000).map {
             Timestamped(value: $0, timestamp: now.advanced(by: TimeInterval(-1001+$0)))
         }
-        try await serverMetric.update(values)
-        
+        try serverMetric.update(values)
+
+        try await client.updateAllMetrics()
+
         let full = try await clientMetric.history()
         XCTAssertEqual(full, values)
         

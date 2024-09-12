@@ -14,5 +14,5 @@ public protocol RequestAccessManager {
      - Parameter metrics: All metrics being accessed for the request
      - Returns: A list of all metrics allowed to access
      */
-    func getAllowedMetrics(for request: URLRequest, on route: ServerRoute, accessing metrics: [MetricIdHash]) throws -> [MetricIdHash]
+    func getAllowedMetrics(for request: URLRequest, on route: ServerRoute, accessing metrics: [MetricId]) throws -> [MetricId]
 }

@@ -4,7 +4,7 @@ import ClairvoyantClient
 
 extension String: RequestAccessManager {
     
-    public func getAllowedMetrics(for request: URLRequest, on route: ServerRoute, accessing metrics: [MetricIdHash]) throws -> [MetricIdHash] {
+    public func getAllowedMetrics(for request: URLRequest, on route: ServerRoute, accessing metrics: [MetricId]) throws -> [MetricId] {
         guard let accessToken = request.value(forHTTPHeaderField: ServerRoute.headerAccessToken) else {
             throw MetricError.requestFailed
         }
