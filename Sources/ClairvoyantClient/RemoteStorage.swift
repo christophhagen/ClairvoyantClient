@@ -125,15 +125,14 @@ public actor RemoteStorage<Storage> where Storage: MetricStorage {
         while !metricsToUpdate.isEmpty {
             // Send timestamps to server and request updated values
             let response = try await client.updates(metrics: metricsToUpdate, limit: maximumNumberOfUpdatesPerRequest)
-
+            var numberOfUpdates = 0
             // Save received values and delete missing chunks
-            for (id, state) in metricsToUpdate {
-                guard let update = response[id] else {
-                    // No update was included from the server,
-                    // which means either that the metric was not found, or that
-                    // no changes occured
-                    // In both cases we don't need to update the metric further
-                    metricsToUpdate[id] = nil
+            for (id, update) in response {
+                numberOfUpdates += update.numberOfUpdates
+                guard let state = metricsToUpdate[id] else {
+                    // Updates received for metric that was not requested
+                    // TODO: Log this somewhere?
+                    print("Update received for unknown metric \(id)")
                     continue
                 }
                 // Remove all deleted values
@@ -156,6 +155,13 @@ public actor RemoteStorage<Storage> where Storage: MetricStorage {
                     lastValueTimestamp: valueTimestamp,
                     lastSyncTimestamp: syncTimestamp)
             }
+            // Check if some metrics were not included in the response 
+            // due to the update limit
+            guard numberOfUpdates == maximumNumberOfUpdatesPerRequest else {
+                continue
+            }
+            // Otherwise remove the metrics not included in the response (not included means no updates)
+            metricsToUpdate = metricsToUpdate.filter { response[$0.key] != nil }
         }
     }
 
@@ -200,8 +206,11 @@ public actor RemoteStorage<Storage> where Storage: MetricStorage {
     }
 
     private func add(values: [Timestamped<Data>], to id: MetricId, valueType: MetricType) throws {
-        // TODO: Handle missing type?
-        try customTypes[valueType]?.decode(values, for: id, using: client.decoder, andStoreIn: local)
+        guard let handle = customTypes[valueType] else {
+            print("No handle for \(valueType)")
+            return
+        }
+        try handle.decode(values, for: id, using: client.decoder, andStoreIn: local)
     }
 }
 
@@ -250,4 +259,18 @@ extension RemoteStorage: AsyncMetricStorage {
     public func add<T>(changeListener: @escaping (Timestamped<T>) -> Void, for metric: MetricId) throws where T : MetricValue {
         try local.add(changeListener: changeListener, for: metric)
     }
+
+    public func setGlobalChangeListener(_ listener: @escaping (MetricId, Date) -> Void) async throws {
+        try local.setGlobalChangeListener(listener)
+    }
+
+    public func add(deletionListener: @escaping (ClosedRange<Date>) -> Void, for metric: MetricId) throws {
+        try local.add(deletionListener: deletionListener, for: metric)
+    }
+
+    public func setGlobalDeletionListener(_ listener: @escaping (MetricId, ClosedRange<Date>) -> Void) async throws {
+        try local.setGlobalDeletionListener(listener)
+    }
+
+
 }

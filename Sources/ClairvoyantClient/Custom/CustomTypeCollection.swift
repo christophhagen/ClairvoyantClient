@@ -6,7 +6,9 @@ public struct CustomTypeCollection {
     let customTypes: [MetricType : CustomTypeHandle]
 
     public init() {
-        self.customTypes = [:]
+        var builder = Builder()
+        builder.addWellKnownTypes()
+        self.customTypes = builder.customTypes
     }
 
     public init(_ closure: (inout Builder) -> Void) {
