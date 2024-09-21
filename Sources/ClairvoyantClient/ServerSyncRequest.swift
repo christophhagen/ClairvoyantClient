@@ -1,33 +1,6 @@
 import Foundation
 import Clairvoyant
 
-public struct MetricState {
-
-    public let valueType: MetricType
-
-    public let lastValueTimestamp: Date
-
-    public let lastSyncTimestamp: Date
-}
-
-extension MetricState: Codable {
-
-    public init(from decoder: any Decoder) throws {
-        var container = try decoder.unkeyedContainer()
-        self.valueType = try container.decode()
-        self.lastValueTimestamp = try container.decode()
-        self.lastSyncTimestamp = try container.decode()
-    }
-
-    public func encode(to encoder: any Encoder) throws {
-        var container = encoder.unkeyedContainer()
-        try container.encode(valueType)
-        try container.encode(lastValueTimestamp)
-        try container.encode(lastSyncTimestamp)
-    }
-}
-
-
 /**
  A request to the server with the local state.
 
