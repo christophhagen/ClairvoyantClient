@@ -12,11 +12,15 @@ public enum ServerRoute {
     /// Get a list of all metrics
     case getMetricList
 
+    /// Get historic data of a metric
+    case history(MetricId)
+
     /// The full path of the route
     public var rawValue: String {
         switch self {
         case .updates: return Prefix.updates.rawValue
         case .getMetricList: return Prefix.getMetricList.rawValue
+        case .history(let id): return Prefix.history.appending(id: id)
         }
     }
 
@@ -30,6 +34,8 @@ public enum ServerRoute {
             return .updates
         case .getMetricList:
             return .getMetricList
+        case .history:
+            return .history
         }
     }
 
@@ -37,6 +43,7 @@ public enum ServerRoute {
     public enum Prefix: String {
         case updates = "sync"
         case getMetricList = "list"
+        case history = "history"
 
         /**
          Create a full server route by adding the hash of a metric.
@@ -47,6 +54,7 @@ public enum ServerRoute {
             switch self {
             case .updates: return .updates
             case .getMetricList: return .getMetricList
+            case .history: return .history(id)
             }
         }
 
